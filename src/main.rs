@@ -1,10 +1,13 @@
 extern crate iron;
 extern crate router;
+extern crate urlencoded;
 #[macro_use] extern crate mime;
 
 use iron::prelude::*;
 use iron::status;
 use router::Router;
+use urlencoded::UrlEncodedBody;
+use std::str::FromStr;
 
 fn main(){
     let mut router = Router::new();
@@ -34,9 +37,42 @@ fn get_form(_request: &mut Request) -> IronResult<Response> {
 fn post_gcd(request: &mut Request) -> IronResult<Response>{
     let mut resp = Response::new();
 
-    resp.set_mut(status::Ok);
-    resp.set_mut(r#"OK!"#);
+    let form_data = match request.get_ref::<UrlEncodedBody>(){
+        Err(e) => {
+            resp.set_mut(status::BadRequest);
+            resp.set_mut(format!("error parsing data {:?}\n", e));
+            return Ok(resp)
+        }
+        Ok(map) => map
+    };
+    let unparsed_numbers = match form_data.get("n") {
+        None => {
+            resp.set_mut(status::BadRequest);
+            resp.set_mut(format!("form data has no 'n' paramter\n"));
+            return Ok(resp)
+        }
+        Some(nums) => nums
+    };
 
+    let mut numbers = Vec::new();
+    for unparsed in unparsed_numbers {
+        match u64::from_str(&unparsed) {
+            Err(_) => {
+                resp.set_mut(status::BadRequest);
+                resp.set_mut(format!("Value for 'n' is not a number {:?}\n", unparsed));
+                return Ok(resp)
+            }
+            Ok(n) => { numbers.push(n); }
+        }
+    }
+    let mut d = numbers[0];
+    for m in &numbers[1..] {
+        d = gcd(d, *m);
+    }
+
+    resp.set_mut(status::Ok);
+    resp.set_mut(mime!(Text/Html;Charset=Utf8));
+    resp.set_mut(format!("The GCD of {:?} is <b>{}</b>\n", numbers, d));
     Ok(resp)
 }
 
